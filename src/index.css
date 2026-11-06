@@ -1,0 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
+
+:root,
+:root[data-theme='light'] {
+  --ink: #111111;
+  --muted: #667085;
+  --accent: #1f4e79;
+  --accent-soft: rgba(31, 78, 121, 0.1);
+  --danger: #b42318;
+  --app-bg: #ffffff;
+  --chrome: #ffffff;
+  --panel: #ffffff;
+  --stage: #ffffff;
+  --paper: #ffffff;
+  --input: #ffffff;
+  --line: #ececec;
+  --hover: rgba(17, 17, 17, 0.05);
+  --active: rgba(31, 78, 121, 0.1);
+  --code-bg: #f7f7f5;
+  --quote-border: #1f4e79;
+  --editor-font-size: 17px;
+  --display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
+  --sans: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+}
+
+:root[data-theme='dark'] {
+  --ink: #ececec;
+  --muted: #98a2b3;
+  --accent: #8eb6d3;
+  --accent-soft: rgba(142, 182, 211, 0.16);
+  --danger: #f97066;
+  --app-bg: #121212;
+  --chrome: #161616;
+  --panel: #161616;
+  --stage: #121212;
+  --paper: #161616;
+  --input: #121212;
+  --line: #2a2a2a;
+  --hover: rgba(236, 236, 236, 0.06);
+  --active: rgba(142, 182, 211, 0.16);
+  --code-bg: #1e1e1e;
+  --quote-border: #8eb6d3;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Hide classic scrollbar steppers (▲/▼) in Chromium/Electron on Windows */
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button:start:decrement,
+*::-webkit-scrollbar-button:end:increment,
+*::-webkit-scrollbar-button:vertical:start:decrement,
+*::-webkit-scrollbar-button:vertical:end:increment,
+*::-webkit-scrollbar-button:horizontal:start:decrement,
+*::-webkit-scrollbar-button:horizontal:end:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+}
+
+body {
+  min-width: 320px;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--app-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  overflow: hidden;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+.milkdown .ProseMirror,
+.source-editor,
+.titlebar-title-input,
+.modal-card input {
+  user-select: text;
+}
+
+img {
+  max-width: 100%;
+}
+
+.source-editor {
+  font-size: calc(var(--editor-font-size) - 2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

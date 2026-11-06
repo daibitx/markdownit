@@ -1,0 +1,519 @@
+/**
+ * IDE-grade Markdown reading/editing surface.
+ * Overrides Milkdown Crepe "frame" defaults (landing-page headings,
+ * 120px ProseMirror padding, browser-like chrome) toward Typora-like denseness.
+ */
+
+.crepe-host,
+.crepe-host .milkdown {
+  width: 100%;
+  min-width: 0;
+}
+
+.milkdown {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--ink);
+  --crepe-color-surface: var(--code-bg);
+  --crepe-color-surface-low: color-mix(in srgb, var(--code-bg) 80%, var(--line));
+  --crepe-color-on-surface: var(--ink);
+  --crepe-color-on-surface-variant: var(--muted);
+  --crepe-color-outline: var(--line);
+  --crepe-color-primary: var(--accent);
+  --crepe-color-secondary: color-mix(in srgb, var(--line) 70%, var(--code-bg));
+  --crepe-color-on-secondary: var(--ink);
+  --crepe-color-inverse: var(--ink);
+  --crepe-color-on-inverse: var(--paper);
+  --crepe-color-inline-code: #b42318;
+  --crepe-color-error: var(--danger);
+  --crepe-color-hover: var(--hover);
+  --crepe-color-selected: color-mix(in srgb, var(--accent) 22%, transparent);
+  --crepe-color-inline-area: var(--code-bg);
+  --crepe-base-font-size: var(--editor-font-size);
+  --crepe-font-title: var(--display);
+  --crepe-font-default: var(--display);
+  --crepe-font-code: var(--mono);
+  --crepe-shadow-1: 0 1px 2px rgba(17, 17, 17, 0.06), 0 8px 24px rgba(17, 17, 17, 0.06);
+  --crepe-shadow-2: 0 2px 8px rgba(17, 17, 17, 0.1);
+}
+
+:root[data-theme='dark'] .milkdown {
+  --crepe-color-inline-code: #f97066;
+  --crepe-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --crepe-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+/* Kill Crepe's demo-page padding; paper already frames the column */
+.milkdown .ProseMirror {
+  padding: 0 !important;
+  max-width: none;
+  min-height: 52vh;
+  font-family: var(--display);
+  font-size: var(--editor-font-size);
+  font-weight: 400;
+  line-height: 1.8;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  caret-color: var(--accent);
+  outline: none;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.milkdown .ProseMirror > *:first-child {
+  margin-top: 0 !important;
+}
+
+.milkdown .ProseMirror > *:last-child {
+  margin-bottom: 0;
+}
+
+/* ——— Headings: editorial, not landing-page ——— */
+.milkdown .ProseMirror h1,
+.milkdown .ProseMirror h2,
+.milkdown .ProseMirror h3,
+.milkdown .ProseMirror h4,
+.milkdown .ProseMirror h5,
+.milkdown .ProseMirror h6 {
+  font-family: var(--display);
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+  padding: 0 !important;
+  scroll-margin-top: 1.5rem;
+}
+
+.milkdown .ProseMirror h1 {
+  font-size: 1.75em;
+  line-height: 1.3;
+  margin: 0.55em 0 0.55em;
+  padding-bottom: 0.35em !important;
+  border-bottom: 1px solid var(--line);
+}
+
+.milkdown .ProseMirror h2 {
+  font-size: 1.38em;
+  line-height: 1.35;
+  margin: 1.55em 0 0.55em;
+}
+
+.milkdown .ProseMirror h3 {
+  font-size: 1.18em;
+  line-height: 1.4;
+  margin: 1.35em 0 0.45em;
+}
+
+.milkdown .ProseMirror h4 {
+  font-size: 1.05em;
+  line-height: 1.45;
+  margin: 1.2em 0 0.4em;
+}
+
+.milkdown .ProseMirror h5,
+.milkdown .ProseMirror h6 {
+  font-size: 1em;
+  line-height: 1.5;
+  margin: 1.1em 0 0.35em;
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+}
+
+.milkdown .ProseMirror h6 {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ——— Body ——— */
+.milkdown .ProseMirror p {
+  margin: 0.85em 0;
+  padding: 0 !important;
+  font-size: 1em;
+  line-height: 1.85;
+  text-align: left;
+}
+
+.milkdown .ProseMirror strong {
+  font-weight: 700;
+}
+
+.milkdown .ProseMirror em {
+  font-style: italic;
+}
+
+.milkdown .ProseMirror s {
+  color: color-mix(in srgb, var(--ink) 70%, var(--muted));
+}
+
+.milkdown .ProseMirror a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.milkdown .ProseMirror a:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* ——— Quote ——— */
+.milkdown .ProseMirror blockquote {
+  position: relative;
+  margin: 1.15em 0;
+  padding: 0.15em 0 0.15em 1rem !important;
+  box-sizing: border-box !important;
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  border: 0;
+  background: transparent;
+}
+
+.milkdown .ProseMirror blockquote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.25em;
+  bottom: 0.25em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--quote-border);
+}
+
+.milkdown .ProseMirror blockquote p {
+  margin: 0.35em 0;
+}
+
+/* ——— Inline code ——— */
+.milkdown .ProseMirror code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  font-weight: 500;
+  color: var(--crepe-color-inline-code);
+  background: var(--code-bg);
+  border: 1px solid color-mix(in srgb, var(--line) 85%, var(--ink));
+  border-radius: 4px;
+  padding: 0.12em 0.38em;
+  display: inline;
+  line-height: 1.45;
+}
+
+/* ——— Code block (Crepe CodeMirror host) ——— */
+.milkdown .milkdown-code-block {
+  margin: 1.15em 0 !important;
+  padding: 0.45rem 0.35rem 0.65rem !important;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--code-bg) !important;
+  overflow: hidden;
+}
+
+.milkdown .milkdown-code-block.selected {
+  outline: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 0;
+}
+
+.milkdown .milkdown-code-block .tools {
+  padding: 0 0.55rem;
+  min-height: 1.6rem;
+}
+
+.milkdown .milkdown-code-block .tools .language-button {
+  font-family: var(--sans) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0;
+  margin-bottom: 0.35rem !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group button {
+  font-family: var(--sans) !important;
+  font-weight: 500 !important;
+  border-radius: 4px !important;
+}
+
+.milkdown .milkdown-code-block .cm-editor {
+  background: transparent !important;
+  font-family: var(--mono) !important;
+  font-size: 0.88em;
+  line-height: 1.65;
+}
+
+.milkdown .milkdown-code-block .cm-content {
+  padding: 0.55rem 1rem 0.85rem !important;
+  font-family: var(--mono);
+}
+
+/* Typora-like: no permanent line-number gutter */
+.milkdown .milkdown-code-block .cm-gutters {
+  display: none !important;
+}
+
+/* Code token colors — match app ink/accent, not Crepe demo palette */
+.milkdown .milkdown-code-block .cm-editor .ͼc,
+.milkdown .milkdown-code-block .tok-keyword {
+  color: #0f6a8a;
+}
+.milkdown .milkdown-code-block .tok-string,
+.milkdown .milkdown-code-block .cm-editor .ͼd {
+  color: #9a3412;
+}
+.milkdown .milkdown-code-block .tok-comment {
+  color: var(--muted);
+  font-style: italic;
+}
+.milkdown .milkdown-code-block .tok-number {
+  color: #a16207;
+}
+.milkdown .milkdown-code-block .tok-bool,
+.milkdown .milkdown-code-block .tok-atom {
+  color: #7c3aed;
+}
+.milkdown .milkdown-code-block .tok-propertyName,
+.milkdown .milkdown-code-block .tok-variableName {
+  color: var(--ink);
+}
+:root[data-theme='dark'] .milkdown .milkdown-code-block .tok-keyword,
+:root[data-theme='dark'] .milkdown .milkdown-code-block .cm-editor .ͼc {
+  color: #7dd3fc;
+}
+:root[data-theme='dark'] .milkdown .milkdown-code-block .tok-string,
+:root[data-theme='dark'] .milkdown .milkdown-code-block .cm-editor .ͼd {
+  color: #fdba74;
+}
+:root[data-theme='dark'] .milkdown .milkdown-code-block .tok-number {
+  color: #fde68a;
+}
+:root[data-theme='dark'] .milkdown .milkdown-code-block .tok-bool,
+:root[data-theme='dark'] .milkdown .milkdown-code-block .tok-atom {
+  color: #c4b5fd;
+}
+
+.milkdown .ProseMirror pre {
+  margin: 1.15em 0;
+  padding: 0.95em 1.05em !important;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--code-bg) !important;
+  overflow: auto;
+  line-height: 1.65;
+  font-family: var(--mono);
+  font-size: 0.88em;
+}
+
+.milkdown .ProseMirror pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  border-radius: 0;
+}
+
+/* ——— Lists: redraw Crepe markers to match body type ——— */
+.milkdown .ProseMirror ul,
+.milkdown .ProseMirror ol {
+  margin: 0.65em 0;
+  padding-left: 0.25em;
+}
+
+.milkdown .milkdown-list-item-block {
+  margin: 0.12em 0;
+}
+
+.milkdown .milkdown-list-item-block > .list-item {
+  gap: 0.55rem;
+}
+
+.milkdown .milkdown-list-item-block li {
+  gap: 0.55rem !important;
+  align-items: flex-start !important;
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper {
+  width: 1.45rem !important;
+  height: calc(var(--editor-font-size) * 1.85) !important;
+  min-height: 1.6rem;
+  color: var(--muted) !important;
+  flex-shrink: 0;
+  margin-top: 0 !important;
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper .label {
+  width: 1.45rem !important;
+  height: calc(var(--editor-font-size) * 1.85) !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-family: var(--sans);
+  font-size: 0.88em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper svg {
+  width: 14px !important;
+  height: 14px !important;
+  fill: color-mix(in srgb, var(--ink) 58%, var(--muted)) !important;
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper .checked,
+.milkdown .milkdown-list-item-block li .label-wrapper .unchecked {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper .unchecked {
+  border: 1.5px solid color-mix(in srgb, var(--muted) 70%, var(--line));
+  background: var(--paper);
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper .checked {
+  border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--paper));
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper .checked svg {
+  fill: var(--accent) !important;
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper .unchecked svg {
+  fill: transparent !important;
+}
+
+.milkdown .milkdown-list-item-block .children > p,
+.milkdown .ProseMirror li > p {
+  margin: 0.15em 0;
+}
+
+.milkdown .ProseMirror li + li,
+.milkdown .milkdown-list-item-block + .milkdown-list-item-block {
+  margin-top: 0.12em;
+}
+
+/* ——— Table: keep Crepe defaults, only theme colors ——— */
+.milkdown .milkdown-table-block {
+  margin: 1em 0;
+}
+
+.milkdown .milkdown-table-block table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.milkdown .milkdown-table-block th,
+.milkdown .milkdown-table-block td {
+  border-color: var(--line) !important;
+}
+
+.milkdown .milkdown-table-block th {
+  background: var(--code-bg);
+}
+
+.milkdown .milkdown-table-block .selectedCell::after {
+  background-color: color-mix(in srgb, var(--accent) 24%, transparent) !important;
+  opacity: 1 !important;
+}
+
+/* ——— HR / images ——— */
+.milkdown .ProseMirror hr {
+  border: 0 !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: 1.85em 0 !important;
+  background: var(--line) !important;
+  background-clip: border-box !important;
+}
+
+.milkdown .ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.1em auto;
+  border-radius: 4px;
+}
+
+.milkdown .ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px;
+}
+
+/* ——— Selection & current-block feedback ——— */
+.milkdown .ProseMirror *::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.milkdown .ProseMirror .ProseMirror-selectednode {
+  background: color-mix(in srgb, var(--accent) 14%, transparent) !important;
+  outline: none;
+  border-radius: 4px;
+}
+
+.milkdown .ProseMirror-focused > *:has(.ProseMirror-selectednode),
+.milkdown .ProseMirror p:has(> .ProseMirror-selectednode),
+.milkdown .ProseMirror h1:focus-within,
+.milkdown .ProseMirror h2:focus-within,
+.milkdown .ProseMirror h3:focus-within,
+.milkdown .ProseMirror li:focus-within,
+.milkdown .ProseMirror p:focus-within {
+  border-radius: 4px;
+}
+
+.milkdown .ProseMirror-focused p:focus-within,
+.milkdown .ProseMirror-focused h1:focus-within,
+.milkdown .ProseMirror-focused h2:focus-within,
+.milkdown .ProseMirror-focused h3:focus-within,
+.milkdown .ProseMirror-focused h4:focus-within,
+.milkdown .ProseMirror-focused blockquote:focus-within,
+.milkdown .ProseMirror-focused .milkdown-list-item-block:focus-within {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.milkdown .ProseMirror-focused .milkdown-code-block:focus-within {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.milkdown .crepe-placeholder::before {
+  color: color-mix(in srgb, var(--muted) 78%, transparent) !important;
+  font-style: normal;
+  letter-spacing: 0.01em;
+}
+
+/* ——— Block handle / slash menu: quieter, denser ——— */
+.milkdown .milkdown-block-handle .operation-item {
+  width: 26px !important;
+  height: 26px !important;
+  padding: 3px !important;
+  border-radius: 5px !important;
+}
+
+.milkdown .milkdown-block-handle .operation-item svg {
+  width: 18px !important;
+  height: 18px !important;
+  fill: var(--muted) !important;
+}
+
+.milkdown .milkdown-slash-menu {
+  border: 1px solid var(--line);
+  border-radius: 10px !important;
+  overflow: hidden;
+  font-family: var(--sans) !important;
+  background: var(--panel) !important;
+  box-shadow: var(--crepe-shadow-1) !important;
+}
+
+.milkdown .milkdown-slash-menu .tab-group ul li,
+.milkdown .milkdown-slash-menu .menu-item {
+  font-weight: 500 !important;
+}
+
+.milkdown .milkdown-toolbar {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel) !important;
+  box-shadow: var(--crepe-shadow-1);
+  font-family: var(--sans);
+}
