@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('markdownit', {
   deleteFolder: (id) => ipcRenderer.invoke('db:deleteFolder', id),
   createDocument: (folderId, title, content) =>
     ipcRenderer.invoke('db:createDocument', folderId, title, content),
+  openExternalDocument: (filePath) => ipcRenderer.invoke('db:openExternalDocument', filePath),
   saveDocument: (id, payload) => ipcRenderer.invoke('db:saveDocument', id, payload),
   renameDocument: (id, title) => ipcRenderer.invoke('db:renameDocument', id, title),
   deleteDocument: (id) => ipcRenderer.invoke('db:deleteDocument', id),

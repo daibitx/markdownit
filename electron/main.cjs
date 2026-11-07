@@ -47,6 +47,13 @@ function windowColor(theme) {
   return theme === 'dark' ? '#0e2421' : '#d5e3dc'
 }
 
+function getInstallRoot() {
+  if (app.isPackaged) {
+    return path.dirname(app.getPath('exe'))
+  }
+  return path.join(__dirname, '..')
+}
+
 function deliverPendingOpen() {
   if (!pendingOpenPath || !mainWindow || mainWindow.isDestroyed()) return
   const target = pendingOpenPath
@@ -128,6 +135,7 @@ function registerIpc() {
   ipcMain.handle('db:createDocument', (_e, folderId, title, content) =>
     db.createDocument(folderId, title, content),
   )
+  ipcMain.handle('db:openExternalDocument', (_e, filePath) => db.openExternalDocument(filePath))
   ipcMain.handle('db:saveDocument', (_e, id, payload) => db.saveDocument(id, payload))
   ipcMain.handle('db:renameDocument', (_e, id, title) => db.renameDocument(id, title))
   ipcMain.handle('db:deleteDocument', (_e, id) => db.deleteDocument(id))
@@ -238,7 +246,7 @@ if (!gotLock) {
 
 app.whenReady().then(() => {
   if (!gotLock) return
-  db.initDatabase(app.getPath('userData'))
+  db.initDatabase(getInstallRoot())
   registerIpc()
 
   protocol.handle('asset', async (request) => {

@@ -14,8 +14,14 @@ function id() {
   return crypto.randomUUID()
 }
 
-function initDatabase(userDataPath) {
-  const dir = path.join(userDataPath, 'data')
+function ensureColumn(table, column, definition) {
+  const columns = requireDb().prepare(`PRAGMA table_info(${table})`).all()
+  if (columns.some((item) => item.name === column)) return
+  requireDb().exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+}
+
+function initDatabase(installRoot) {
+  const dir = path.join(installRoot, 'data')
   fs.mkdirSync(dir, { recursive: true })
   const dbPath = path.join(dir, 'markdownit.sqlite')
   db = new Database(dbPath)
@@ -58,6 +64,10 @@ function initDatabase(userDataPath) {
     CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
   `)
 
+  ensureColumn('documents', 'file_path', 'TEXT')
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_path
+    ON documents(file_path) WHERE file_path IS NOT NULL`)
+
   const count = db.prepare('SELECT COUNT(*) AS c FROM documents').get().c
   if (count === 0) {
     seed()
@@ -82,8 +92,8 @@ function seed() {
   ).run(folderId, '笔记', ts, ts)
 
   db.prepare(
-    `INSERT INTO documents (id, folder_id, title, content, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO documents (id, folder_id, title, content, file_path, created_at, updated_at)
+     VALUES (?, ?, ?, ?, NULL, ?, ?)`,
   ).run(docId, folderId, '草稿', STARTER_CONTENT, ts, ts)
 
   const upsertSetting = db.prepare(
@@ -98,7 +108,7 @@ function migrateWelcomeCopy() {
   const rows = db
     .prepare(
       `SELECT id, title, content FROM documents
-       WHERE title LIKE ? OR content LIKE ? OR title = ? OR content LIKE ?`,
+       WHERE file_path IS NULL AND (title LIKE ? OR content LIKE ? OR title = ? OR content LIKE ?)`,
     )
     .all('%欢迎使用 MarkdownIt%', '%欢迎使用 MarkdownIt%', '草稿', '%在这里开始写%')
   const update = db.prepare(
@@ -126,6 +136,47 @@ function requireDb() {
   return db
 }
 
+function mapDocumentRow(row) {
+  if (!row) return undefined
+  const filePath = row.filePath || null
+  let content = row.content ?? ''
+  let missing = false
+
+  if (filePath) {
+    try {
+      content = fs.readFileSync(filePath, 'utf8')
+    } catch {
+      content = ''
+      missing = true
+    }
+  }
+
+  return {
+    id: row.id,
+    folderId: row.folderId,
+    title: row.title,
+    content,
+    filePath,
+    missing,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function documentSelect(whereSql = '') {
+  return `SELECT id, folder_id AS folderId, title, content, file_path AS filePath,
+                 created_at AS createdAt, updated_at AS updatedAt
+          FROM documents ${whereSql}`
+}
+
+function externalSize(filePath) {
+  try {
+    return fs.statSync(filePath).size
+  } catch {
+    return 0
+  }
+}
+
 function listTree() {
   const database = requireDb()
   const folders = database
@@ -137,20 +188,31 @@ function listTree() {
   const documents = database
     .prepare(
       `SELECT id, folder_id AS folderId, title, updated_at AS updatedAt, created_at AS createdAt,
-              length(content) AS size
+              file_path AS filePath, content
        FROM documents ORDER BY updated_at DESC`,
     )
     .all()
+    .map((row) => ({
+      id: row.id,
+      folderId: row.folderId,
+      title: row.title,
+      updatedAt: row.updatedAt,
+      createdAt: row.createdAt,
+      filePath: row.filePath || null,
+      size: row.filePath ? externalSize(row.filePath) : String(row.content || '').length,
+    }))
   return { folders, documents }
 }
 
 function getDocument(docId) {
-  return requireDb()
-    .prepare(
-      `SELECT id, folder_id AS folderId, title, content, created_at AS createdAt, updated_at AS updatedAt
-       FROM documents WHERE id = ?`,
-    )
-    .get(docId)
+  const row = requireDb().prepare(documentSelect('WHERE id = ?')).get(docId)
+  return mapDocumentRow(row)
+}
+
+function findDocumentByPath(filePath) {
+  const resolved = path.resolve(filePath)
+  const row = requireDb().prepare(documentSelect('WHERE file_path = ?')).get(resolved)
+  return mapDocumentRow(row)
 }
 
 function createFolder(name, parentId = null) {
@@ -182,10 +244,38 @@ function createDocument(folderId = null, title = '未命名', content = '# 未�
   const docId = id()
   requireDb()
     .prepare(
-      `INSERT INTO documents (id, folder_id, title, content, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO documents (id, folder_id, title, content, file_path, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NULL, ?, ?)`,
     )
     .run(docId, folderId, title, content, ts, ts)
+  setSetting('lastDocumentId', docId)
+  return getDocument(docId)
+}
+
+function openExternalDocument(filePath) {
+  const resolved = path.resolve(filePath)
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+    throw new Error('文件不存在')
+  }
+
+  const existing = findDocumentByPath(resolved)
+  if (existing) {
+    setSetting('lastDocumentId', existing.id)
+    requireDb()
+      .prepare(`UPDATE documents SET title = ?, updated_at = ? WHERE id = ?`)
+      .run(path.basename(resolved, path.extname(resolved)), now(), existing.id)
+    return getDocument(existing.id)
+  }
+
+  const ts = now()
+  const docId = id()
+  const title = path.basename(resolved, path.extname(resolved))
+  requireDb()
+    .prepare(
+      `INSERT INTO documents (id, folder_id, title, content, file_path, created_at, updated_at)
+       VALUES (?, NULL, ?, '', ?, ?, ?)`,
+    )
+    .run(docId, title, resolved, ts, ts)
   setSetting('lastDocumentId', docId)
   return getDocument(docId)
 }
@@ -196,24 +286,60 @@ function saveDocument(docId, { title, content, folderId }) {
   const nextTitle = title ?? current.title
   const nextContent = content ?? current.content
   const nextFolder = folderId === undefined ? current.folderId : folderId
+  const ts = now()
+
+  if (current.filePath) {
+    fs.writeFileSync(current.filePath, nextContent ?? '', 'utf8')
+    requireDb()
+      .prepare(
+        `UPDATE documents
+         SET title = ?, content = '', folder_id = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(nextTitle, nextFolder, ts, docId)
+    return getDocument(docId)
+  }
+
   requireDb()
     .prepare(
       `UPDATE documents
        SET title = ?, content = ?, folder_id = ?, updated_at = ?
        WHERE id = ?`,
     )
-    .run(nextTitle, nextContent, nextFolder, now(), docId)
+    .run(nextTitle, nextContent, nextFolder, ts, docId)
   return getDocument(docId)
 }
 
 function renameDocument(docId, title) {
+  const current = getDocument(docId)
+  if (!current) throw new Error('Document not found')
+  const nextTitle = String(title || '').trim() || current.title
+
+  if (current.filePath) {
+    const dir = path.dirname(current.filePath)
+    const ext = path.extname(current.filePath) || '.md'
+    const base = nextTitle.replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ').trim() || '未命名'
+    const nextPath = path.join(dir, /\.(md|markdown|txt)$/i.test(base) ? base : `${base}${ext}`)
+    if (path.resolve(nextPath) !== path.resolve(current.filePath)) {
+      if (fs.existsSync(nextPath)) throw new Error('同名文件已存在')
+      fs.renameSync(current.filePath, nextPath)
+    }
+    requireDb()
+      .prepare(
+        `UPDATE documents SET title = ?, file_path = ?, content = '', updated_at = ? WHERE id = ?`,
+      )
+      .run(path.basename(nextPath, path.extname(nextPath)), nextPath, now(), docId)
+    return getDocument(docId)
+  }
+
   requireDb()
     .prepare(`UPDATE documents SET title = ?, updated_at = ? WHERE id = ?`)
-    .run(title, now(), docId)
+    .run(nextTitle, now(), docId)
   return getDocument(docId)
 }
 
 function deleteDocument(docId) {
+  // External docs only remove the library link; the file on disk stays.
   requireDb().prepare(`DELETE FROM documents WHERE id = ?`).run(docId)
   return listTree()
 }
@@ -222,14 +348,17 @@ function searchDocuments(query) {
   const q = `%${query.trim()}%`
   return requireDb()
     .prepare(
-      `SELECT id, folder_id AS folderId, title, updated_at AS updatedAt,
-              substr(content, 1, 160) AS snippet
+      `SELECT id, folder_id AS folderId, title, updated_at AS updatedAt, file_path AS filePath,
+              CASE
+                WHEN file_path IS NOT NULL THEN file_path
+                ELSE substr(content, 1, 160)
+              END AS snippet
        FROM documents
-       WHERE title LIKE ? OR content LIKE ?
+       WHERE title LIKE ? OR (file_path IS NULL AND content LIKE ?) OR (file_path IS NOT NULL AND file_path LIKE ?)
        ORDER BY updated_at DESC
        LIMIT 50`,
     )
-    .all(q, q)
+    .all(q, q, q)
 }
 
 function saveAsset(documentId, mime, dataBase64) {
@@ -279,10 +408,12 @@ module.exports = {
   closeDatabase,
   listTree,
   getDocument,
+  findDocumentByPath,
   createFolder,
   renameFolder,
   deleteFolder,
   createDocument,
+  openExternalDocument,
   saveDocument,
   renameDocument,
   deleteDocument,

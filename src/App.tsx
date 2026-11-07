@@ -117,6 +117,7 @@ function App() {
               updatedAt: hit.updatedAt,
               createdAt: hit.updatedAt,
               size: hit.snippet.length,
+              filePath: hit.filePath ?? null,
             })),
           )
         })
@@ -147,7 +148,11 @@ function App() {
     editorApiRef.current = null
     setDocKey((key) => key + 1)
     await api.setSetting('lastDocumentId', id)
-    setStatus('已打开')
+    if (doc.filePath) {
+      setStatus(doc.missing ? '外部文件已丢失' : '已打开外部文件')
+    } else {
+      setStatus('已打开')
+    }
   }, [])
 
   const persist = useCallback(async (reason = '已保存') => {
@@ -165,6 +170,10 @@ function App() {
     draftRef.current = saved.content
     setDirty(false)
     await refreshTree()
+    if (saved.filePath) {
+      setStatus(reason === '自动保存' ? '已写入外部文件' : '已保存到外部文件')
+      return
+    }
     const mirrored = await mirrorToDirectory(saved.title, saved.content)
     if (saveDirectoryRef.current && !mirrored?.ok) setStatus('文库已保存，文件夹写入失败')
     else setStatus(reason)
@@ -309,35 +318,28 @@ function App() {
     setStatus(result.ok ? 'PDF 已导出' : '已取消导出')
   }, [activeDoc?.title, dirty, persist])
 
-  const openMarkdownContent = useCallback(async (file: { name: string; content: string }) => {
+  const openExternalFile = useCallback(async (filePath: string) => {
     if (dirty) await persist()
-    const api = getApi()
-    const doc = await api.createDocument(null, file.name, file.content)
-    await refreshTree()
-    await openDocument(doc.id)
-    const mirrored = await mirrorToDirectory(file.name, file.content)
-    if (saveDirectoryRef.current) {
-      setStatus(mirrored?.ok ? '已打开，并写入文件夹' : '已打开，写入文件夹失败')
-    } else {
-      setStatus('已打开')
+    try {
+      const doc = await getApi().openExternalDocument(filePath)
+      await refreshTree()
+      await openDocument(doc.id)
+      setSidebarOpen(true)
+      setStatus('已打开外部文件')
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : '无法打开这个文件')
     }
-    setSidebarOpen(true)
-  }, [dirty, mirrorToDirectory, openDocument, persist, refreshTree])
+  }, [dirty, openDocument, persist, refreshTree])
 
   const importMarkdown = useCallback(async () => {
     const file = await getApi().importMarkdownFile()
-    if (!file) return
-    await openMarkdownContent(file)
-  }, [openMarkdownContent])
+    if (!file?.filePath) return
+    await openExternalFile(file.filePath)
+  }, [openExternalFile])
 
   const openFromPath = useCallback(async (filePath: string) => {
-    const file = await getApi().readMarkdownPath(filePath)
-    if (!file) {
-      setStatus('无法打开这个文件')
-      return
-    }
-    await openMarkdownContent(file)
-  }, [openMarkdownContent])
+    await openExternalFile(filePath)
+  }, [openExternalFile])
 
   const currentMarkdown = useCallback(() => {
     if (mode === 'wysiwyg' && editorApiRef.current) return editorApiRef.current.getMarkdown()
@@ -352,6 +354,10 @@ function App() {
     await getApi().setSetting('saveDirectory', directory)
     if (!activeDoc) {
       setStatus('已选择文件夹')
+      return
+    }
+    if (activeDoc.filePath) {
+      setStatus('外部文件会写回原路径，不必再选文件夹')
       return
     }
     const mirrored = await mirrorToDirectory(activeDoc.title, currentMarkdown())
@@ -731,7 +737,11 @@ function App() {
           <span className="status-text">{status}</span>
         </div>
         <div className="status-save">
-          {saveDirectory ? (
+          {activeDoc.filePath ? (
+            <span className="status-dir" title={activeDoc.filePath}>
+              外部文件 · {directoryLabel(activeDoc.filePath)}
+            </span>
+          ) : saveDirectory ? (
             <>
               <span className="status-dir" title={saveDirectory}>
                 写入 {directoryLabel(saveDirectory)}
@@ -781,7 +791,9 @@ function App() {
           confirm?.kind === 'folder-delete'
             ? `确定删除「${confirm.name}」及其包含的文档吗？此操作不可撤销。`
             : confirm
-              ? `确定删除「${confirm.title}」吗？此操作不可撤销。`
+              ? documents.find((item) => item.id === confirm.id)?.filePath
+                ? `确定从文库移除「${confirm.title}」吗？只会取消链接，不会删除磁盘上的原文件。`
+                : `确定删除「${confirm.title}」吗？此操作不可撤销。`
               : ''
         }
         onCancel={() => setConfirm(null)}

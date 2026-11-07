@@ -13,6 +13,7 @@ export type DocumentListItem = {
   updatedAt: string
   createdAt: string
   size: number
+  filePath?: string | null
 }
 
 export type DocumentRecord = {
@@ -20,6 +21,8 @@ export type DocumentRecord = {
   folderId: string | null
   title: string
   content: string
+  filePath?: string | null
+  missing?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -30,6 +33,7 @@ export type SearchHit = {
   title: string
   updatedAt: string
   snippet: string
+  filePath?: string | null
 }
 
 export type AssetRecord = {
@@ -51,6 +55,7 @@ export type MarkdownItApi = {
     title?: string,
     content?: string,
   ) => Promise<DocumentRecord>
+  openExternalDocument: (filePath: string) => Promise<DocumentRecord>
   saveDocument: (
     id: string,
     payload: { title?: string; content?: string; folderId?: string | null },
