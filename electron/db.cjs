@@ -62,11 +62,14 @@ function initDatabase(installRoot) {
     CREATE INDEX IF NOT EXISTS idx_documents_folder ON documents(folder_id);
     CREATE INDEX IF NOT EXISTS idx_assets_document ON assets(document_id);
     CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
+    CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC);
   `)
 
   ensureColumn('documents', 'file_path', 'TEXT')
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_path
     ON documents(file_path) WHERE file_path IS NOT NULL`)
+  // Existing installs already have the documents table; ensure new indexes are created too.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC)`)
 
   const count = db.prepare('SELECT COUNT(*) AS c FROM documents').get().c
   if (count === 0) {
