@@ -39,6 +39,7 @@ type TitleBarProps = {
   onToggleTheme: () => void
   onFontSizeChange: (size: number) => void
   onRenameTitle: (title: string) => void
+  onOpenFile: () => void
   onExportPdf: () => void
 }
 
@@ -55,6 +56,7 @@ export function TitleBar({
   onToggleTheme,
   onFontSizeChange,
   onRenameTitle,
+  onOpenFile,
   onExportPdf,
 }: TitleBarProps) {
   const [editing, setEditing] = useState(false)
@@ -166,6 +168,9 @@ export function TitleBar({
             onClick={onToggleTheme}
           >
             {theme === 'light' ? <IconMoon /> : <IconSun />}
+          </button>
+          <button type="button" className="text-btn shelf" onClick={onOpenFile}>
+            打开
           </button>
           <button type="button" className="text-btn" onClick={onExportPdf}>
             PDF

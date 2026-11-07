@@ -67,7 +67,17 @@ export type MarkdownItApi = {
   getSetting: (key: string, fallback?: string | null) => Promise<string | null>
   setSetting: (key: string, value: string) => Promise<boolean>
   exportPdf: (defaultName?: string) => Promise<{ ok: boolean; filePath?: string }>
-  importMarkdownFile: () => Promise<{ name: string; content: string } | null>
+  importMarkdownFile: () => Promise<{ name: string; content: string; filePath?: string } | null>
+  readMarkdownPath: (
+    filePath: string,
+  ) => Promise<{ name: string; content: string; filePath: string } | null>
+  chooseDirectory: () => Promise<string | null>
+  saveIntoDirectory: (
+    directory: string,
+    title: string,
+    content: string,
+  ) => Promise<{ ok: boolean; filePath?: string }>
+  getPathForFile: (file: File) => string
   exportMarkdownFile: (
     defaultName: string,
     content: string,
@@ -76,6 +86,7 @@ export type MarkdownItApi = {
   windowMaximizeToggle: () => Promise<boolean>
   windowClose: () => Promise<void>
   windowIsMaximized: () => Promise<boolean>
+  setWindowBackground: (theme: 'light' | 'dark') => Promise<void>
   onWindowMaximized: (handler: (maximized: boolean) => void) => () => void
   onMenuCommand: (
     handler: (command: string, payload?: string) => void,

@@ -1,3 +1,4 @@
+const fs = require('node:fs')
 const path = require('node:path')
 const { app, BrowserWindow, ipcMain, dialog, protocol, Menu, shell } = require('electron')
 const db = require('./db.cjs')
@@ -5,6 +6,53 @@ const { buildAppMenu } = require('./menu.cjs')
 
 const isDev = !app.isPackaged
 let mainWindow = null
+let pendingOpenPath = markdownArgFrom(process.argv)
+
+function isMarkdownPath(filePath) {
+  return typeof filePath === 'string' && /\.(md|markdown|txt)$/i.test(filePath)
+}
+
+function markdownArgFrom(argv) {
+  for (const arg of argv || []) {
+    if (!arg || arg.startsWith('-')) continue
+    if (!isMarkdownPath(arg)) continue
+    try {
+      if (fs.existsSync(arg)) return path.resolve(arg)
+    } catch {
+      /* ignore unreadable argv entries */
+    }
+  }
+  return null
+}
+
+function readMarkdownFile(filePath) {
+  return {
+    name: path.basename(filePath, path.extname(filePath)),
+    content: fs.readFileSync(filePath, 'utf8'),
+    filePath,
+  }
+}
+
+function safeFileName(name) {
+  const cleaned = String(name || '未命名')
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/g, '')
+  const base = cleaned || '未命名'
+  return /\.(md|markdown)$/i.test(base) ? base : `${base}.md`
+}
+
+function windowColor(theme) {
+  return theme === 'dark' ? '#0e2421' : '#d5e3dc'
+}
+
+function deliverPendingOpen() {
+  if (!pendingOpenPath || !mainWindow || mainWindow.isDestroyed()) return
+  const target = pendingOpenPath
+  pendingOpenPath = null
+  mainWindow.webContents.send('menu:command', 'open-path', target)
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -28,7 +76,7 @@ function createWindow() {
     show: false,
     frame: false,
     transparent: false,
-    backgroundColor: '#ffffff',
+    backgroundColor: windowColor(db.getSetting('theme', 'light')),
     center: true,
     maximizable: true,
     title: 'MarkdownIt',
@@ -53,6 +101,10 @@ function createWindow() {
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
     mainWindow.show()
     emitWindowState()
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    deliverPendingOpen()
   })
 
   if (isDev) {
@@ -100,34 +152,52 @@ function registerIpc() {
       pageSize: 'A4',
       margins: { marginType: 'default' },
     })
-    const fs = require('node:fs')
     fs.writeFileSync(filePath, pdf)
     return { ok: true, filePath }
   })
 
   ipcMain.handle('file:importMarkdown', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-      title: '导入 Markdown',
+      title: '打开 Markdown',
       properties: ['openFile'],
       filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }],
     })
     if (canceled || !filePaths?.[0]) return null
-    const fs = require('node:fs')
-    const filePath = filePaths[0]
-    return {
-      name: path.basename(filePath, path.extname(filePath)),
-      content: fs.readFileSync(filePath, 'utf8'),
-    }
+    return readMarkdownFile(filePaths[0])
+  })
+
+  ipcMain.handle('file:readMarkdownPath', (_e, filePath) => {
+    if (!isMarkdownPath(filePath)) return null
+    const resolved = path.resolve(filePath)
+    if (!fs.existsSync(resolved)) return null
+    return readMarkdownFile(resolved)
+  })
+
+  ipcMain.handle('file:chooseDirectory', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: '选择保存目录',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (canceled || !filePaths?.[0]) return null
+    return filePaths[0]
+  })
+
+  ipcMain.handle('file:saveIntoDirectory', (_e, directory, title, content) => {
+    if (!directory || typeof directory !== 'string') return { ok: false }
+    const resolved = path.resolve(directory)
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) return { ok: false }
+    const filePath = path.join(resolved, safeFileName(title))
+    fs.writeFileSync(filePath, content ?? '', 'utf8')
+    return { ok: true, filePath }
   })
 
   ipcMain.handle('file:exportMarkdown', async (_e, defaultName, content) => {
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       title: '导出 Markdown',
-      defaultPath: `${defaultName || 'document'}.md`,
+      defaultPath: safeFileName(defaultName || 'document'),
       filters: [{ name: 'Markdown', extensions: ['md'] }],
     })
     if (canceled || !filePath) return { ok: false }
-    const fs = require('node:fs')
     fs.writeFileSync(filePath, content, 'utf8')
     return { ok: true, filePath }
   })
@@ -145,9 +215,29 @@ function registerIpc() {
     mainWindow?.close()
   })
   ipcMain.handle('window:isMaximized', () => Boolean(mainWindow?.isMaximized()))
+  ipcMain.handle('window:setBackground', (_e, theme) => {
+    mainWindow?.setBackgroundColor(windowColor(theme))
+  })
+}
+
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const filePath = markdownArgFrom(argv)
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+    if (filePath) {
+      pendingOpenPath = filePath
+      deliverPendingOpen()
+    }
+  })
 }
 
 app.whenReady().then(() => {
+  if (!gotLock) return
   db.initDatabase(app.getPath('userData'))
   registerIpc()
 

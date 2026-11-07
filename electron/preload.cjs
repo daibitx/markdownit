@@ -1,4 +1,11 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webUtils } = require('electron')
+
+const queuedMenuCommands = []
+let menuHandler = null
+ipcRenderer.on('menu:command', (_event, command, payload) => {
+  if (menuHandler) menuHandler(command, payload)
+  else queuedMenuCommands.push([command, payload])
+})
 
 contextBridge.exposeInMainWorld('markdownit', {
   listTree: () => ipcRenderer.invoke('db:listTree'),
@@ -19,20 +26,30 @@ contextBridge.exposeInMainWorld('markdownit', {
   setSetting: (key, value) => ipcRenderer.invoke('db:setSetting', key, value),
   exportPdf: (defaultName) => ipcRenderer.invoke('export:pdf', defaultName),
   importMarkdownFile: () => ipcRenderer.invoke('file:importMarkdown'),
+  readMarkdownPath: (filePath) => ipcRenderer.invoke('file:readMarkdownPath', filePath),
+  chooseDirectory: () => ipcRenderer.invoke('file:chooseDirectory'),
+  saveIntoDirectory: (directory, title, content) =>
+    ipcRenderer.invoke('file:saveIntoDirectory', directory, title, content),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   exportMarkdownFile: (defaultName, content) =>
     ipcRenderer.invoke('file:exportMarkdown', defaultName, content),
   windowMinimize: () => ipcRenderer.invoke('window:minimize'),
   windowMaximizeToggle: () => ipcRenderer.invoke('window:maximizeToggle'),
   windowClose: () => ipcRenderer.invoke('window:close'),
   windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  setWindowBackground: (theme) => ipcRenderer.invoke('window:setBackground', theme),
   onWindowMaximized: (handler) => {
     const listener = (_event, value) => handler(Boolean(value))
     ipcRenderer.on('window:maximized', listener)
     return () => ipcRenderer.removeListener('window:maximized', listener)
   },
   onMenuCommand: (handler) => {
-    const listener = (_event, command, payload) => handler(command, payload)
-    ipcRenderer.on('menu:command', listener)
-    return () => ipcRenderer.removeListener('menu:command', listener)
+    menuHandler = (command, payload) => handler(command, payload)
+    for (const [command, payload] of queuedMenuCommands.splice(0, queuedMenuCommands.length)) {
+      handler(command, payload)
+    }
+    return () => {
+      if (menuHandler) menuHandler = null
+    }
   },
 })

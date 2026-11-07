@@ -32,6 +32,11 @@ type ConfirmState =
   | { kind: 'folder-delete'; id: string; name: string }
   | null
 
+function directoryLabel(directory: string) {
+  const parts = directory.split(/[/\\]/).filter(Boolean)
+  return parts[parts.length - 1] || directory
+}
+
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -67,15 +72,28 @@ function App() {
   const [tableModalOpen, setTableModalOpen] = useState(false)
   const [formatInsert, setFormatInsert] = useState<'link' | 'image' | null>(null)
   const [bootError, setBootError] = useState<string | null>(null)
+  const [saveDirectory, setSaveDirectory] = useState<string | null>(null)
 
   const editorApiRef = useRef<EditorApi | null>(null)
   const sourceRef = useRef<SourceEditorHandle>(null)
   const draftRef = useRef('')
   const activeIdRef = useRef<string | null>(null)
   const saveTimerRef = useRef<number | null>(null)
+  const saveDirectoryRef = useRef<string | null>(null)
 
   draftRef.current = draft
   activeIdRef.current = activeDoc?.id ?? null
+  saveDirectoryRef.current = saveDirectory
+
+  const mirrorToDirectory = useCallback(async (title: string, content: string) => {
+    const directory = saveDirectoryRef.current
+    if (!directory) return null
+    try {
+      return await getApi().saveIntoDirectory(directory, title, content)
+    } catch {
+      return { ok: false }
+    }
+  }, [])
 
   const outline = useMemo(() => extractOutline(draft), [draft])
   const sidebarDocuments = searchHits ?? documents
@@ -147,8 +165,10 @@ function App() {
     draftRef.current = saved.content
     setDirty(false)
     await refreshTree()
-    setStatus(reason)
-  }, [activeDoc, mode, refreshTree])
+    const mirrored = await mirrorToDirectory(saved.title, saved.content)
+    if (saveDirectoryRef.current && !mirrored?.ok) setStatus('文库已保存，文件夹写入失败')
+    else setStatus(reason)
+  }, [activeDoc, mirrorToDirectory, mode, refreshTree])
 
   const scheduleSave = useCallback((content: string) => {
     setDraft(content)
@@ -251,6 +271,7 @@ function App() {
     setTheme(next)
     document.documentElement.dataset.theme = next
     await api.setSetting('theme', next)
+    await api.setWindowBackground(next)
     setStatus(next === 'dark' ? '暗色' : '浅色')
   }, [theme])
 
@@ -288,16 +309,61 @@ function App() {
     setStatus(result.ok ? 'PDF 已导出' : '已取消导出')
   }, [activeDoc?.title, dirty, persist])
 
-  const importMarkdown = useCallback(async () => {
-    const api = getApi()
-    const file = await api.importMarkdownFile()
-    if (!file) return
+  const openMarkdownContent = useCallback(async (file: { name: string; content: string }) => {
     if (dirty) await persist()
+    const api = getApi()
     const doc = await api.createDocument(null, file.name, file.content)
     await refreshTree()
     await openDocument(doc.id)
-    setStatus('已导入')
-  }, [dirty, openDocument, persist, refreshTree])
+    const mirrored = await mirrorToDirectory(file.name, file.content)
+    if (saveDirectoryRef.current) {
+      setStatus(mirrored?.ok ? '已打开，并写入文件夹' : '已打开，写入文件夹失败')
+    } else {
+      setStatus('已打开')
+    }
+    setSidebarOpen(true)
+  }, [dirty, mirrorToDirectory, openDocument, persist, refreshTree])
+
+  const importMarkdown = useCallback(async () => {
+    const file = await getApi().importMarkdownFile()
+    if (!file) return
+    await openMarkdownContent(file)
+  }, [openMarkdownContent])
+
+  const openFromPath = useCallback(async (filePath: string) => {
+    const file = await getApi().readMarkdownPath(filePath)
+    if (!file) {
+      setStatus('无法打开这个文件')
+      return
+    }
+    await openMarkdownContent(file)
+  }, [openMarkdownContent])
+
+  const currentMarkdown = useCallback(() => {
+    if (mode === 'wysiwyg' && editorApiRef.current) return editorApiRef.current.getMarkdown()
+    return draftRef.current
+  }, [mode])
+
+  const chooseSaveDirectory = useCallback(async () => {
+    const directory = await getApi().chooseDirectory()
+    if (!directory) return
+    saveDirectoryRef.current = directory
+    setSaveDirectory(directory)
+    await getApi().setSetting('saveDirectory', directory)
+    if (!activeDoc) {
+      setStatus('已选择文件夹')
+      return
+    }
+    const mirrored = await mirrorToDirectory(activeDoc.title, currentMarkdown())
+    setStatus(mirrored?.ok ? '之后会写入这个文件夹' : '这个文件夹无法写入')
+  }, [activeDoc, currentMarkdown, mirrorToDirectory])
+
+  const clearSaveDirectory = useCallback(async () => {
+    saveDirectoryRef.current = null
+    setSaveDirectory(null)
+    await getApi().setSetting('saveDirectory', '')
+    setStatus('已停止写入文件夹')
+  }, [])
 
   const exportMarkdown = useCallback(async () => {
     const content = mode === 'wysiwyg' && editorApiRef.current
@@ -321,6 +387,10 @@ function App() {
         const savedTheme = (await api.getSetting('theme', 'light')) as 'light' | 'dark'
         setTheme(savedTheme === 'dark' ? 'dark' : 'light')
         document.documentElement.dataset.theme = savedTheme === 'dark' ? 'dark' : 'light'
+        await api.setWindowBackground(savedTheme === 'dark' ? 'dark' : 'light')
+        const savedDir = await api.getSetting('saveDirectory', '')
+        saveDirectoryRef.current = savedDir || null
+        setSaveDirectory(savedDir || null)
         const savedFont = Number(await api.getSetting('fontSize', '18'))
         const nextFont = Number.isFinite(savedFont) ? Math.min(28, Math.max(14, savedFont)) : 18
         setFontSize(nextFont)
@@ -350,7 +420,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!isDesktop()) return
+    if (!isDesktop() || !ready) return
     const api = getApi()
     return api.onMenuCommand((command, payload) => {
       void (async () => {
@@ -363,6 +433,15 @@ function App() {
             break
           case 'import-markdown':
             await importMarkdown()
+            break
+          case 'open-path':
+            if (typeof payload === 'string' && payload) await openFromPath(payload)
+            break
+          case 'choose-directory':
+            await chooseSaveDirectory()
+            break
+          case 'clear-directory':
+            await clearSaveDirectory()
             break
           case 'export-markdown':
             await exportMarkdown()
@@ -410,15 +489,47 @@ function App() {
     })
   }, [
     applyFormat,
+    chooseSaveDirectory,
+    clearSaveDirectory,
     createDocument,
     createFolder,
     exportMarkdown,
     exportPdf,
     importMarkdown,
+    openFromPath,
     persist,
     toggleMode,
+    ready,
     toggleTheme,
   ])
+
+  useEffect(() => {
+    if (!isDesktop()) return
+    const prevent = (event: DragEvent) => {
+      event.preventDefault()
+    }
+    const onDrop = (event: DragEvent) => {
+      event.preventDefault()
+      const file = event.dataTransfer?.files?.[0]
+      if (!file) return
+      if (!/\.(md|markdown|txt)$/i.test(file.name)) {
+        setStatus('请拖入 Markdown 文件')
+        return
+      }
+      try {
+        const filePath = getApi().getPathForFile(file)
+        if (filePath) void openFromPath(filePath)
+      } catch {
+        setStatus('无法读取拖入的文件')
+      }
+    }
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragover', prevent)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [openFromPath])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -504,6 +615,7 @@ function App() {
         onToggleTheme={() => void toggleTheme()}
         onFontSizeChange={(size) => void changeFontSize(size)}
         onRenameTitle={(title) => void renameActiveTitle(title)}
+        onOpenFile={() => void importMarkdown()}
         onExportPdf={() => void exportPdf()}
       />
 
@@ -618,7 +730,26 @@ function App() {
           </div>
           <span className="status-text">{status}</span>
         </div>
-        <span className="status-right">{mode === 'wysiwyg' ? '实时' : '源码'} · Ctrl+/</span>
+        <div className="status-save">
+          {saveDirectory ? (
+            <>
+              <span className="status-dir" title={saveDirectory}>
+                写入 {directoryLabel(saveDirectory)}
+              </span>
+              <button type="button" className="status-link" onClick={() => void chooseSaveDirectory()}>
+                更换文件夹
+              </button>
+              <button type="button" className="status-link" onClick={() => void clearSaveDirectory()}>
+                不保存到文件夹
+              </button>
+            </>
+          ) : (
+            <button type="button" className="status-link" onClick={() => void chooseSaveDirectory()}>
+              保存到文件夹
+            </button>
+          )}
+          <span className="status-right">{mode === 'wysiwyg' ? '实时预览' : '源码'}</span>
+        </div>
       </footer>
 
       <PromptModal

@@ -53,9 +53,33 @@
       "electron/**/*",
       "package.json"
     ],
+    "npmRebuild": false,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Markdown",
+        "description": "Markdown 文档",
+        "role": "Editor"
+      }
+    ],
     "win": {
       "target": [
         "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MarkdownIt",
+      "installerLanguages": [
+        "zh_CN"
       ]
     }
   }
